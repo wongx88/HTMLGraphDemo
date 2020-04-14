@@ -7,12 +7,29 @@
     <script src="http://d3js.org/d3.v5.min.js"></script>
     <script src="https://d3js.org/d3-array.v2.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/1.6.19/topojson.min.js"></script>
+    <script src="https://d3js.org/d3-scale.v3.min.js"></script>
     <script src="edgeBundling.js"></script>
     <script src="bubbleMap.js"></script>
-    <script src="forceD.js"></script>
+    <script src="bubbleMap_2.js"></script>
+    <script src="bubbleMap_3.js"></script>
     <script src="index.js"></script>
+    <script src="CirclePacking.js"></script>
+    <script src="forceD.js"></script>
 </head>
 
 <body>
+<div id="header">
+    <h4>Please select your visualization.</h4>
+    <p>
+        <label><input type="radio" name="vis" value="ForceDirected">ForceDirected</label>
+        <label><input type="radio" name="vis" value="EdgeBundling">EdgeBundling</label>
+        <label><input type="radio" name="vis" value="HeatMap#1">HeatMap#1</label>
+        <label><input type="radio" name="vis" value="HeatMap#2">HeatMap#2</label>
+        <label><input type="radio" name="vis" value="HeatMap#3">HeatMap#3</label>
+    </p>
+
+    <p><input type="button" id="visual-1" value="Visualize"></p>
+</div>
+
 </body>
 </html>

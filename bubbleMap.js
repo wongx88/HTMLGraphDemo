@@ -48,14 +48,14 @@ var BubbleMap = (function () {
 
         // self.data = new Map((await d3.json("https://gist.githubusercontent.com/mbostock/5ff33e1f3a3f9d6b1b38c8a79df86377/raw/0d71e5d21c9e44fed63b41c2e8b2f28ffd133213/population.json")).slice(1).map(([population, state, county]) => [state + county, +population]));
 
-        data = await d3.csv("Dataset/Credit_Card_Transaction_Data.csv").then(function (data) {
+        data = await d3.csv("Dataset/Customer_Transaction_Data_2020-04-03.csv").then(function (data) {
 
-            data = d3.pairs(data, ({'Billing Address': address}, {'Amount': amount}) => {
-                return {state: address.split(",")[2].trim(), amount: +amount.substring(1)};
+            data = d3.pairs(data, ({'Billing_State': address}, {'Amount': amount}) => {
+                return {state: address.trim(), amount: +amount.substring(1)};
             })
+
             self.data = d3.rollup(data, v => d3.sum(v, d => +d.amount), d => d.state)
-            console.log(self.data)
-            //
+
             self.radius = d3.scaleSqrt([0, d3.quantile([...self.data.values()].sort(d3.ascending), 0.485)], [this.minRadius = 0, this.maxRadius = 15])
 
             legend.append("circle")
@@ -70,21 +70,24 @@ var BubbleMap = (function () {
                 .text(d3.format(".1s"));
 
             // console.log(topojson.feature(self.topology, self.topology.objects.counties).features.map(d => (d.value = d.properties.name,d)))
-
             self.svg.append("g")
                 .attr("fill", "brown")
                 .attr("fill-opacity", 0.5)
                 .attr("stroke", "#fff")
                 .attr("stroke-width", 0.5)
                 .selectAll("circle")
-                .data(topojson.feature(self.topology, self.topology.objects.states).features
-                    .map(d => (d.value = self.data.get(d.properties.name), d))
-                    .sort((a, b) => b.value - a.value))
+                .data(
+                    topojson.feature(self.topology, self.topology.objects.states).features
+                        .map(d => (d.value = self.data.get(d.properties.name), d))
+                        .sort((a, b) => b.value - a.value)
+                )
                 .join("circle")
                 .attr("transform", d => `translate(${self.path.centroid(d)})`)
                 .attr("r", d => self.radius(d.value))
                 .append("title")
                 .text(d => `${d.properties.name};${self.format(d.value)}`);
+
+
             document.body.append(self.svg.node());
             return self.svg.node();
 

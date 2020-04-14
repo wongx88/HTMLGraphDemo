@@ -1,0 +1,389 @@
+<head>
+    <meta charset="utf-8">
+    <style>
+        .link {
+            stroke: black;
+            stroke-width: 1;
+        }
+
+        .node text {
+            pointer-events: none;
+            font: 10px sans-serif;
+        }
+
+        .node {
+            fill: #27AE60;
+        }
+    </style>
+    <script src="https://code.jquery.com/jquery-1.12.2.min.js"
+            integrity="sha256-lZFHibXzMHo3GGeehn1hudTAP3Sc0uKXBXAzHX1sjtk=" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/underscore.js/1.8.3/underscore-min.js"></script>
+    <script src="http://d3js.org/d3.v5.min.js"></script>
+    <script src="https://d3js.org/d3-array.v2.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/1.6.19/topojson.min.js"></script>
+    <script src="https://d3js.org/d3-scale.v3.min.js"></script>
+</head>
+
+<body>
+<svg id="svg" width="3000" height="1500">
+    <defs></defs>
+    <g class="graph">
+        <g class="arrowheads"></g>
+        <g class="links"></g>
+        <g class="nodes"></g>
+    </g>
+</svg>
+
+<script>
+
+
+    d3.json("steps.json").then(function (steps) {
+
+        // var steps = [
+        //     {
+        //         fix: 19336,
+        //         expand: {
+        //             nodes: [19336, 22628, 24534, 19976, 18581, 29496, 19335],
+        //             links: [
+        //                 [22628, 19336],
+        //                 [19335, 19336],
+        //                 [29496, 19336],
+        //                 [18581, 19336],
+        //                 [19976, 19336],
+        //                 [24534, 19336]
+        //             ]
+        //         },
+        //     },
+        //     {
+        //         fix: 19976,
+        //         expand: {
+        //             nodes: [26539, 23892, 18582],
+        //             links: [
+        //                 [19976, 26539],
+        //                 [19976, 23892],
+        //                 [19976, 18582],
+        //             ],
+        //         }
+        //     },
+        //     {
+        //         fix: 19976,
+        //         delete: {
+        //             nodes: [26539, 18582],
+        //             links: [
+        //
+        //                 [19976, 26539],
+        //                 [19976, 18582]
+        //             ]
+        //         }
+        //     },
+        //     {
+        //         clear: "all"
+        //     }
+        // ]
+
+
+        // Store common selections into a variable
+        var select = {
+            svg: d3.select("svg"),
+            graph: d3.select(".graph"),
+            arrowheads: d3.select('defs').selectAll('.arrowhead'),
+            links: d3.select(".links").selectAll(".link"),
+            g: d3.select(".nodes").selectAll(".g")
+        }
+
+        // var xScale = d3.scaleLinear().domain([0,width]).range([0, width/2]);  // Set margins for x specific
+
+////<editor-fold defaultstate="collapsed" desc="Create a zoom and set initial zoom level to 5.5">
+        var zoom = d3.zoom().scaleExtent([1, 16]).on("zoom", zoomed);
+        select.svg.call(zoom).on("dblclick.zoom", null);
+        select.svg.call(zoom.transform, d3.zoomIdentity);
+        zoom.scaleTo(select.svg.transition(), 5.5);
+
+        function zoomed() {
+            select.graph.attr("transform", d3.event.transform);
+        }
+
+////</editor-fold>
+
+
+        var width = select.svg.attr('width')
+        height = select.svg.attr('height');
+
+
+        // Create variables and functions to store and access graph data
+        var nodes = [],
+            links = [],
+            fixedNodeId = null;
+
+        function node(nodeId) {
+            return nodes.find(function (node) {
+                return node.id == nodeId;
+            })
+        }
+
+        function fixedNode() {
+            return node(fixedNodeId);
+        }
+
+        // Register a worker in which the force layout calculation will be executed
+        var worker = new Worker('force.worker.js');
+
+        worker.onmessage = function (event) {
+            nodes = event.data.nodes;
+            links = event.data.links;
+            draw();
+        };
+
+        updateGraph();
+
+
+        var transitionDuration = 2000;
+
+        /**
+         * Draw the svg elements on the canvas.
+         * It uses d3 update pattern to add and remove data from the graph
+         * Nice transitions are used to keep track of the positions of the
+         * nodes and the links as the layout of the graph evolves
+         * */
+        function draw() {
+            ////<editor-fold defaultstate="collapsed" desc="define key function for nodes">
+            // Defines node and link keys that will be used in data binding
+            function nodeKey(n) {
+                return n.id;
+            }
+
+            function linkKey(d) {
+                //arrow marker doesn't accept spaces in between so replace them
+                return d.source.id.replace(/\s/g, '') + '||' + d.target.id.replace(/\s/g, '');
+            }
+
+            ////</editor-fold>
+
+            var fNode = fixedNode();
+//<editor-fold defaultstate="collapsed" desc="arrowhead defenition">
+            // draw arrow heads used as marker-end to the links
+            select.arrowheads = select.arrowheads.data(links, linkKey);
+
+            //exit condition for arrowheads
+            select.arrowheads
+                .exit()
+                .transition()
+                .duration(transitionDuration)
+                .attr("opacity", 0)
+                .remove();
+
+            var newArrowHeads = select.arrowheads.enter()
+                .append("marker")
+                .attr("class", "arrowhead")
+                .attr("viewBox", "-0 -5 10 10")
+                .attr("refX", "20")
+                .attr("refY", "0")
+                .attr("orient", "auto")
+                .attr("markerWidth", "3")
+                .attr("markerHeight", "3")
+                .attr("xoverflow", "visible")
+
+            newArrowHeads.append("path")
+                .attr("d", "M 0,-5 L 10, 0 L 0, 5")
+
+            newArrowHeads
+                .attr("opacity", 0)
+                .transition()
+                .duration(transitionDuration)
+                .attr("opacity", 0.5)
+
+            select.arrowheads = newArrowHeads.merge(select.arrowheads);
+
+            select.arrowheads.attr('id', d => `arrowhead${linkKey(d)}`)
+//</editor-fold>
+            ////<editor-fold defaultstate="collapsed" desc="links definition">
+            // draw links between nodes
+            select.links = select.links.data(links, linkKey);
+
+            select.links
+                .exit()
+                .transition()
+                .duration(transitionDuration)
+                .attr("x1", d => node(d.source.id) ? node(d.source.id).x : d.source.x)
+                .attr("y1", d => node(d.source.id) ? node(d.source.id).y : d.source.y)
+                .attr("x2", d => node(d.target.id) ? node(d.target.id).x : d.target.x)
+                .attr("y2", d => node(d.target.id) ? node(d.target.id).y : d.target.y)
+                .attr("stroke-opacity", 0)
+                .remove();
+
+            var newLinks = select.links.enter()
+                .append("line")
+                .attr("class", "link")
+                .attr("x1", d => fNode.x)
+                .attr("y1", d => fNode.y)
+                .attr("x2", d => fNode.x)
+                .attr("y2", d => fNode.y)
+
+            select.links = newLinks.merge(select.links);
+
+            select.links.attr('marker-end', d => `url(#arrowhead${linkKey(d)})`)
+
+            select.links
+                .transition()
+                .duration(transitionDuration)
+                .attr("x1", d => d.source.x)
+                .attr("y1", d => d.source.y)
+                .attr("x2", d => d.target.x)
+                .attr("y2", d => d.target.y)
+                .attr("stroke-opacity", 0.2)
+
+
+            select.g = select.g.data(nodes, nodeKey);
+            ////</editor-fold>
+            ////<editor-fold defaultstate="collapsed" desc="circles definition">
+
+            var newGs = select.g.enter()
+                .append("g");
+
+
+            var newCircles = newGs.append("circle");
+
+
+            var newTexts = newGs.append("text");
+            newTexts
+                .text(function (d) {
+                    return d.id;
+                })
+                .style("font-size", function (d) {
+
+                    return 5 + "px";
+                })
+            ;
+
+
+            // draw nodes as circles
+            //  select.circles = select.circles.data(nodes, nodeKey);
+
+            select.g
+                .exit()
+                .transition()
+                .duration(transitionDuration)
+                .style("opacity", 0)
+                .remove();
+
+            //newCircles = select.circles.enter()
+            //       .append("circle")
+
+            newCircles
+                .attr("class", "node")
+                .attr("cx", d => fNode.x)
+                .attr("cy", d => fNode.y)
+                .attr("r", 3)
+
+            newTexts.attr("class", "text")
+                .attr("dx", d => fNode.x)
+                .attr("dy", d => fNode.y)
+
+            select.g = newGs.merge(select.g);
+            x = Math.floor(Math.random() * width / 2);
+            y = Math.floor(Math.random() * height / 2);
+            select.g.select(".node").transition()
+                .duration(transitionDuration)
+                .attr("cx", d => d.x)
+                .attr("cy", d => d.y);
+
+            select.g.select(".text").transition()
+                .duration(transitionDuration)
+                .attr("dx", d => d.x)
+                .attr("dy", d => d.y);
+
+            // select.g.transition()
+            //     .duration(transitionDuration)
+            //     .attr("dx", d => d.x)
+            //     .attr("dy", d => d.y);
+            //
+            // newCircles
+            //     .transition()
+            //     .duration(transitionDuration)
+            //     .attr("cx", d => d.x)
+            //     .attr("cy", d => d.y);
+            //
+            // newTexts.transition()
+            //     .duration(transitionDuration)
+            //     .attr("dx", d => d.x)
+            //     .attr("dy", d => d.y);
+
+
+            ////</editor-fold>
+
+        }
+
+        /**
+         * Update the graph every 3 seconds by adding or removing
+         * nodes and links
+         * */
+        function updateGraph() {
+
+            function iterStep(currentStep) {
+                var step = steps[currentStep]
+                if (step.expand) {
+                    step.expand.nodes.forEach(function (n) {
+                        var nodeToAdd = {id: n};
+                        console.log(nodeToAdd)
+                        nodes.push(nodeToAdd);
+                    });
+                    step.expand.links.forEach(function (l) {
+                        var linkToAdd = {source: l[0], target: l[1]};
+                        console.log(linkToAdd)
+                        links.push(linkToAdd);
+                    })
+                }
+                if (step.delete) {
+                    step.delete.nodes.forEach(function (n) {
+                        nodes = nodes.filter(function (node) {
+                            return node.id != n
+                        })
+                    })
+                    step.delete.links.forEach(function (l) {
+                        links = links.filter(function (link) {
+                            return !(link.source.id == l[0] && link.target.id == l[1])
+                        })
+                    })
+                }
+                if (step.clear) {
+                    nodes = [];
+                    links = [];
+                }
+                if (step.fix) {
+                    fixedNodeId = step.fix;
+                    var fNode = fixedNode();
+
+                    if (fNode && fNode.x && fNode.y) {
+
+
+                        fNode.fx = fNode.x;
+                        fNode.fy = fNode.y;
+                    }
+                }
+                worker.postMessage({
+                    nodes: nodes,
+                    links: links,
+                    center: {x: width / 2, y: height / 2}
+                });
+
+                // release fix nodes
+                nodes.forEach(function (node) {
+                    node.fx = null;
+                    node.fy = null;
+                })
+
+                var nextStep = (currentStep + 1) //% steps.length;
+                setTimeout(function () {
+                    iterStep(nextStep)
+                }, 3000)
+            }
+
+            iterStep(0)
+
+
+        }
+    })
+</script>
+</body>
+
+</html>
